@@ -1,0 +1,19 @@
+name: action-notify-on-change
+description: 'Post useful slack messages when PRs are created'
+inputs:
+  slack-token:
+    description: Token for slack messages
+    default: ""
+    required: false
+#outputs:
+#  message:
+#    description: The message that was posted
+#    value: ${{ steps.build-push-inputs.outputs.image }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: cresta/action-notify-on-change/action-notify-on-change@v1
+      id: action-notify-on-change
+      with:
+        slack-token: ${{ inputs.slack-token }}

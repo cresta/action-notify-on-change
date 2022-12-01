@@ -1,0 +1,10 @@
+name: action-notify-on-change
+description: Runs the main logic
+inputs:
+  slack-token:
+    description: Token for slack messages
+    default: ""
+    required: false
+runs:
+  using: docker
+  image: 'Dockerfile'

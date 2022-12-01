@@ -1,2 +1,2 @@
 # action-notify-on-change
-A github action to notify slack on changes to files or directories.
+A GitHub action to notify slack on changes to files or directories.
