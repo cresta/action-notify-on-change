@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/sethvargo/go-githubactions"
-	"github.com/slack-go/slack"
 	"os"
 	"path/filepath"
-	"sigs.k8s.io/yaml"
 	"strings"
+
+	"github.com/sethvargo/go-githubactions"
+	"github.com/slack-go/slack"
+	"sigs.k8s.io/yaml"
 )
 
 type NotificationFile struct {
@@ -222,6 +223,7 @@ func MergeNotificationsForPath(path string) (*NotificationFile, error) {
 			break
 		}
 		newPath := filepath.Dir(path)
+
 		if newPath == path {
 			// We've reached the root
 			break
