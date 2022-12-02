@@ -218,6 +218,9 @@ func MergeNotificationsForPath(path string) (*NotificationFile, error) {
 			return nil, fmt.Errorf("failed to load notification for path %s: %w", path, err)
 		}
 		ret.Merge(notification)
+		if containsStopFile(path) {
+			break
+		}
 		newPath := filepath.Dir(path)
 		if newPath == path {
 			// We've reached the root
@@ -226,6 +229,14 @@ func MergeNotificationsForPath(path string) (*NotificationFile, error) {
 		path = newPath
 	}
 	return &ret, nil
+}
+
+func containsStopFile(path string) bool {
+	// Check if the path contains a .notify-stop file
+	// If it does, return true
+	// Otherwise, return false
+	_, err := os.Stat(filepath.Join(path, ".git"))
+	return err == nil
 }
 
 func LoadNotificationForPath(path string) (*NotificationFile, error) {

@@ -1,0 +1,26 @@
+name: Update tag for latest action version
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  tag:
+    name: Tag latest action version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          # We need to fetch all SHA to be able to tag the latest one
+          fetch-depth: 0
+      - name: Git config
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+      - name: Tag new target
+        run: |
+          # Change this when you want to update the target version
+          TAG=v1
+          git tag -fa ${TAG} ${{ github.sha }} -m 'Update tag for latest action version'
+          git push origin ${TAG} --force
