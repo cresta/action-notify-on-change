@@ -25,7 +25,8 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v3
         with:
-          go-version-file: './action-notify-on-change/go.mod'
+          go-version-file: 'action-notify-on-change/go.mod'
+          cache-dependency-path: 'action-notify-on-change/go.sum'
           cache: true
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
