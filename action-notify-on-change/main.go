@@ -85,8 +85,17 @@ func main() {
 	}
 }
 
+type ActionStub interface {
+	Fatalf(format string, args ...interface{})
+	Infof(format string, args ...interface{})
+	GetInput(name string) string
+	Context() (*githubactions.GitHubContext, error)
+}
+
+var _ ActionStub = &githubactions.Action{}
+
 type Logic struct {
-	Action *githubactions.Action
+	Action ActionStub
 }
 
 func (l *Logic) Run(ctx context.Context) error {
@@ -247,7 +256,7 @@ func sendChanges(ctx context.Context, client *slack.Client, changes []ChangeToSe
 	return nil
 }
 
-func newSlackClient(token string, action *githubactions.Action) (*slack.Client, error) {
+func newSlackClient(token string, action ActionStub) (*slack.Client, error) {
 	ret := slack.New(token)
 	r, err := ret.AuthTest()
 	if err != nil {
@@ -332,7 +341,7 @@ func removeEmptyAndDeDup(split []string) []string {
 	return deduplicate(ret)
 }
 
-const notificationFile = ".notify.yaml"
+const notificationFile = ".action-notify-on-change.yaml"
 
 func MergeNotificationsForPath(path string) (*NotificationFile, error) {
 	// Walk up the path, looking for notification files
