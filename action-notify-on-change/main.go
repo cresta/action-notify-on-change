@@ -148,7 +148,7 @@ func NewGithubClient(ctx context.Context, token string) (*githubv4.Client, error
 	}
 	err := client.Query(ctx, &query, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query github: %w", err)
+		return nil, fmt.Errorf("failed to query github viewer: %w", err)
 	}
 	return client, nil
 }
@@ -209,7 +209,7 @@ func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, cli
 		variables := map[string]interface{}{
 			"owner": githubv4.String(owner),
 			"repo":  githubv4.String(name),
-			"sha":   githubv4.String(ret.CommitSha),
+			"sha":   githubv4.GitObjectID(ret.CommitSha),
 		}
 		if err := client.Query(ctx, &query, variables); err != nil {
 			return nil, fmt.Errorf("failed to query github: %w", err)
