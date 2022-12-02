@@ -5,9 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
+	"golang.org/x/oauth2"
+
 	"github.com/sethvargo/go-githubactions"
+	"github.com/shurcooL/githubv4"
 	"github.com/slack-go/slack"
 	"sigs.k8s.io/yaml"
 )
@@ -28,7 +33,7 @@ type ChangeToSend struct {
 	Channel           string   // Which Slack channel to send the notification to
 	Users             []string // Users to tag in the notification
 	ModifiedFiles     []string // Files that were modified
-	PullRequestNumber string   // Only set if this is a pull request
+	PullRequestNumber int      // Only set if this is a pull request
 	CommitSha         string   // Only set if this is not a pull request, but a commit
 	Message           string   // The message to send (Extra part of the Slack notification)
 }
@@ -84,8 +89,24 @@ type Logic struct {
 }
 
 func (l *Logic) Run(ctx context.Context) error {
-	changedFiles := removeEmptyAndDeDup(strings.Split(l.Action.GetInput("changed-files"), "\n"))
+	l.Action.Infof("Starting action-notify-on-change")
+	ghClient, err := NewGithubClient(ctx, l.Action.GetInput("github-token"))
+	if err != nil {
+		return fmt.Errorf("failed to create github client: %w", err)
+	}
+	l.Action.Infof("Created github client")
+	ghCtx, err := l.Action.Context()
+	if err != nil {
+		return fmt.Errorf("failed to get github context: %w", err)
+	}
+	input, err := CalculateInput(ctx, ghCtx, ghClient)
+	if err != nil {
+		return fmt.Errorf("failed to calculate input: %w", err)
+	}
+	l.Action.Infof("Calculated input: %+v", input)
+	changedFiles := removeEmptyAndDeDup(input.ChangedFiles)
 	if len(changedFiles) == 0 {
+		l.Action.Infof("No changed files, skipping")
 		return nil
 	}
 	l.Action.Infof("Changed files: %s", strings.Join(changedFiles, ", "))
@@ -93,7 +114,8 @@ func (l *Logic) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create slack client: %w", err)
 	}
-	changes, err := CreateChanges(changedFiles, ChangeTypePullRequest, l.Action.GetInput("pull-request-number"), l.Action.GetInput("commit-sha"))
+	l.Action.Infof("Created slack client")
+	changes, err := CreateChanges(changedFiles, ChangeTypePullRequest, input.PullRequestNumber, input.CommitSha)
 	if err != nil {
 		return fmt.Errorf("failed to create changes: %w", err)
 	}
@@ -101,7 +123,102 @@ func (l *Logic) Run(ctx context.Context) error {
 	if err := sendChanges(ctx, slackClient, changes); err != nil {
 		return fmt.Errorf("failed to send changes: %w", err)
 	}
+	l.Action.Infof("Sent changes")
 	return nil
+}
+
+type ChangeInput struct {
+	ChangedFiles      []string
+	PullRequestNumber int
+	CommitSha         string
+}
+
+func NewGithubClient(ctx context.Context, token string) (*githubv4.Client, error) {
+	src := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: token},
+	)
+	httpClient := oauth2.NewClient(ctx, src)
+
+	client := githubv4.NewClient(httpClient)
+	// Test query to make sure the token works
+	var query struct {
+		Viewer struct {
+			Login githubv4.String
+		}
+	}
+	err := client.Query(ctx, &query, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query github: %w", err)
+	}
+	return client, nil
+}
+
+func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, client *githubv4.Client) (*ChangeInput, error) {
+	ret := &ChangeInput{}
+	ret.CommitSha = ghCtx.SHA
+	if ghCtx.EventName == "pull_request" {
+		rgx := regexp.MustCompile(`^refs/pull/([0-9]+)/merge$`)
+		matches := rgx.FindStringSubmatch(ghCtx.Ref)
+		if len(matches) != 2 {
+			return nil, fmt.Errorf("failed to parse pull request number from ref %s", ghCtx.Ref)
+		}
+		var err error
+		ret.PullRequestNumber, err = strconv.Atoi(matches[1])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse pull request number from ref %s: %w", ghCtx.Ref, err)
+		}
+	}
+	// Calculate changed files
+	if ret.PullRequestNumber != 0 {
+		var query struct {
+			Repository struct {
+				PullRequest struct {
+					Files struct {
+						Nodes []struct {
+							Path githubv4.String
+						}
+					} `graphql:"files(first: 100)"`
+				} `graphql:"pullRequest(number: $pr)"`
+			} `graphql:"repository(owner: $owner, name: $repo)"`
+		}
+		owner, name := ghCtx.Repo()
+		variables := map[string]interface{}{
+			"owner": githubv4.String(owner),
+			"repo":  githubv4.String(name),
+			"pr":    githubv4.Int(ret.PullRequestNumber),
+		}
+		if err := client.Query(ctx, &query, variables); err != nil {
+			return nil, fmt.Errorf("failed to query github: %w", err)
+		}
+		for _, node := range query.Repository.PullRequest.Files.Nodes {
+			ret.ChangedFiles = append(ret.ChangedFiles, string(node.Path))
+		}
+	} else {
+		var query struct {
+			Repository struct {
+				Commit struct {
+					Files struct {
+						Nodes []struct {
+							Path githubv4.String
+						}
+					} `graphql:"files(first: 100)"`
+				} `graphql:"object(oid: $sha)"`
+			} `graphql:"repository(owner: $owner, name: $repo)"`
+		}
+		owner, name := ghCtx.Repo()
+		variables := map[string]interface{}{
+			"owner": githubv4.String(owner),
+			"repo":  githubv4.String(name),
+			"sha":   githubv4.String(ret.CommitSha),
+		}
+		if err := client.Query(ctx, &query, variables); err != nil {
+			return nil, fmt.Errorf("failed to query github: %w", err)
+		}
+		for _, node := range query.Repository.Commit.Files.Nodes {
+			ret.ChangedFiles = append(ret.ChangedFiles, string(node.Path))
+		}
+	}
+	return ret, nil
 }
 
 type ChangeType int
@@ -139,7 +256,7 @@ func sendChange(ctx context.Context, client *slack.Client, change ChangeToSend) 
 	return nil
 }
 
-func CreateChanges(changedFiles []string, changeType ChangeType, prNumber string, commitSha string) ([]ChangeToSend, error) {
+func CreateChanges(changedFiles []string, changeType ChangeType, prNumber int, commitSha string) ([]ChangeToSend, error) {
 	// For each changed file, find the notification file
 	// Merge them together
 	// Create a ChangeToSend for each notification
