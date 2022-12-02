@@ -6,15 +6,9 @@ on:
       - 'v*'
     branches:
       - main
-    paths:
-      - 'action-notify-on-change/**'
-      - '.github/workflows/build.yml'
   pull_request:
     branches:
       - main
-    paths:
-      - 'action-notify-on-change/**'
-      - '.github/workflows/build.yml'
 jobs:
   build:
     name: Test
