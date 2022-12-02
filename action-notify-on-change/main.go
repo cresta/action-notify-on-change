@@ -3,17 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"golang.org/x/oauth2"
-
+	"github.com/google/go-github/v48/github"
 	"github.com/sethvargo/go-githubactions"
 	"github.com/shurcooL/githubv4"
 	"github.com/slack-go/slack"
+	"golang.org/x/oauth2"
 	"sigs.k8s.io/yaml"
 )
 
@@ -90,6 +91,10 @@ type Logic struct {
 
 func (l *Logic) Run(ctx context.Context) error {
 	l.Action.Infof("Starting action-notify-on-change")
+	ghGraphqlClient, err := NewGithubGraphQLClient(ctx, l.Action.GetInput("github-token"))
+	if err != nil {
+		return fmt.Errorf("failed to create github client: %w", err)
+	}
 	ghClient, err := NewGithubClient(ctx, l.Action.GetInput("github-token"))
 	if err != nil {
 		return fmt.Errorf("failed to create github client: %w", err)
@@ -133,7 +138,20 @@ type ChangeInput struct {
 	CommitSha         string
 }
 
-func NewGithubClient(ctx context.Context, token string) (*githubv4.Client, error) {
+func NewGithubClient(ctx context.Context, token string) (*github.Client, error) {
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: token},
+	)
+	tc := oauth2.NewClient(ctx, ts)
+	client := github.NewClient(tc)
+	_, _, err := client.Zen(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query github zen: %w", err)
+	}
+	return client, nil
+}
+
+func NewGithubGraphQLClient(ctx context.Context, token string) (*githubv4.Client, error) {
 	src := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
@@ -153,7 +171,7 @@ func NewGithubClient(ctx context.Context, token string) (*githubv4.Client, error
 	return client, nil
 }
 
-func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, client *githubv4.Client) (*ChangeInput, error) {
+func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, client *github.Client) (*ChangeInput, error) {
 	ret := &ChangeInput{}
 	ret.CommitSha = ghCtx.SHA
 	if ghCtx.EventName == "pull_request" {
@@ -168,54 +186,45 @@ func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, cli
 			return nil, fmt.Errorf("failed to parse pull request number from ref %s: %w", ghCtx.Ref, err)
 		}
 	}
+	// Cannot actually do this with GraphQL: https://github.com/orgs/community/discussions/24496
 	// Calculate changed files
 	if ret.PullRequestNumber != 0 {
-		var query struct {
-			Repository struct {
-				PullRequest struct {
-					Files struct {
-						Nodes []struct {
-							Path githubv4.String
-						}
-					} `graphql:"files(first: 100)"`
-				} `graphql:"pullRequest(number: $pr)"`
-			} `graphql:"repository(owner: $owner, name: $repo)"`
-		}
 		owner, name := ghCtx.Repo()
-		variables := map[string]interface{}{
-			"owner": githubv4.String(owner),
-			"repo":  githubv4.String(name),
-			"pr":    githubv4.Int(ret.PullRequestNumber),
-		}
-		if err := client.Query(ctx, &query, variables); err != nil {
-			return nil, fmt.Errorf("failed to query github: %w", err)
-		}
-		for _, node := range query.Repository.PullRequest.Files.Nodes {
-			ret.ChangedFiles = append(ret.ChangedFiles, string(node.Path))
+		var opts github.ListOptions
+		for {
+			files, resp, err := client.PullRequests.ListFiles(ctx, owner, name, ret.PullRequestNumber, &opts)
+			if err != nil {
+				return nil, fmt.Errorf("failed to list pull request files: %w", err)
+			}
+			if resp.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("failed to list pull request files: %s", resp.Status)
+			}
+			for _, file := range files {
+				ret.ChangedFiles = append(ret.ChangedFiles, file.GetFilename())
+			}
+			if resp.NextPage == 0 {
+				break
+			}
+			opts.Page = resp.NextPage
 		}
 	} else {
-		var query struct {
-			Repository struct {
-				Commit struct {
-					Files struct {
-						Nodes []struct {
-							Path githubv4.String
-						}
-					} `graphql:"files(first: 100)"`
-				} `graphql:"object(oid: $sha)"`
-			} `graphql:"repository(owner: $owner, name: $repo)"`
-		}
 		owner, name := ghCtx.Repo()
-		variables := map[string]interface{}{
-			"owner": githubv4.String(owner),
-			"repo":  githubv4.String(name),
-			"sha":   githubv4.GitObjectID(ret.CommitSha),
-		}
-		if err := client.Query(ctx, &query, variables); err != nil {
-			return nil, fmt.Errorf("failed to query github: %w", err)
-		}
-		for _, node := range query.Repository.Commit.Files.Nodes {
-			ret.ChangedFiles = append(ret.ChangedFiles, string(node.Path))
+		var opts github.ListOptions
+		for {
+			commit, resp, err := client.Repositories.GetCommit(ctx, owner, name, ret.CommitSha, &opts)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get commit: %w", err)
+			}
+			if resp.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("failed to get commit: %s", resp.Status)
+			}
+			for _, file := range commit.Files {
+				ret.ChangedFiles = append(ret.ChangedFiles, file.GetFilename())
+			}
+			if resp.NextPage == 0 {
+				break
+			}
+			opts.Page = resp.NextPage
 		}
 	}
 	return ret, nil
