@@ -3,8 +3,10 @@ description: Runs the main logic
 inputs:
   slack-token:
     description: Token for slack messages
-    default: ""
-    required: false
+    required: true
+  github-token:
+    description: Token for github messages
+    required: true
 runs:
   using: docker
   image: 'Dockerfile'
