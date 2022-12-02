@@ -91,10 +91,11 @@ type Logic struct {
 
 func (l *Logic) Run(ctx context.Context) error {
 	l.Action.Infof("Starting action-notify-on-change")
-	ghGraphqlClient, err := NewGithubGraphQLClient(ctx, l.Action.GetInput("github-token"))
-	if err != nil {
-		return fmt.Errorf("failed to create github client: %w", err)
-	}
+	// TODO: The graphql client is currently unused
+	//ghGraphqlClient, err := NewGithubGraphQLClient(ctx, l.Action.GetInput("github-token"))
+	//if err != nil {
+	//	return fmt.Errorf("failed to create github client: %w", err)
+	//}
 	ghClient, err := NewGithubClient(ctx, l.Action.GetInput("github-token"))
 	if err != nil {
 		return fmt.Errorf("failed to create github client: %w", err)
