@@ -32,7 +32,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           version: latest
-          action-notify-on-change: somedir
+          working-directory: action-notify-on-change
       - name: Verify
         working-directory: ./action-notify-on-change
         run: go mod verify
