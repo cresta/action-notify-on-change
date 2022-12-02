@@ -25,15 +25,18 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v3
         with:
-          go-version-file: 'go.mod'
+          go-version-file: './action-notify-on-change/go.mod'
           cache: true
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
           version: latest
+          action-notify-on-change: somedir
       - name: Verify
+        working-directory: ./action-notify-on-change
         run: go mod verify
       - name: Test
+        working-directory: ./action-notify-on-change
         run: go test -v ./...
   docker:
     needs: build
