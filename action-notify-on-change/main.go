@@ -7,14 +7,17 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/google/go-github/v48/github"
 	"github.com/sethvargo/go-githubactions"
 	"github.com/shurcooL/githubv4"
 	"github.com/slack-go/slack"
 	"golang.org/x/oauth2"
+	"golang.org/x/sync/errgroup"
 	"sigs.k8s.io/yaml"
 )
 
@@ -130,7 +133,7 @@ func (l *Logic) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to create slack client: %w", err)
 	}
 	l.Action.Infof("Created slack client")
-	changes, err := CreateChanges(changedFiles, ChangeTypePullRequest, input.PullRequestNumber, input.CommitSha)
+	changes, err := CreateChanges(ctx, changedFiles, ChangeTypePullRequest, input.PullRequestNumber, input.CommitSha, l.Action, input.RepoReference(), ghClient)
 	if err != nil {
 		return fmt.Errorf("failed to create changes: %w", err)
 	}
@@ -146,6 +149,16 @@ type ChangeInput struct {
 	ChangedFiles      []string
 	PullRequestNumber int
 	CommitSha         string
+	Owner             string
+	Name              string
+}
+
+func (i ChangeInput) RepoReference() *RepoReference {
+	return &RepoReference{
+		Owner: i.Owner,
+		Repo:  i.Name,
+		Sha:   i.CommitSha,
+	}
 }
 
 func NewGithubClient(ctx context.Context, token string) (*github.Client, error) {
@@ -182,8 +195,12 @@ func NewGithubGraphQLClient(ctx context.Context, token string) (*githubv4.Client
 }
 
 func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, client *github.Client) (*ChangeInput, error) {
-	ret := &ChangeInput{}
-	ret.CommitSha = ghCtx.SHA
+	owner, name := ghCtx.Repo()
+	ret := &ChangeInput{
+		Owner:     owner,
+		Name:      name,
+		CommitSha: ghCtx.SHA,
+	}
 	if ghCtx.EventName == "pull_request" {
 		rgx := regexp.MustCompile(`^refs/pull/([0-9]+)/merge$`)
 		matches := rgx.FindStringSubmatch(ghCtx.Ref)
@@ -199,7 +216,6 @@ func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, cli
 	// Cannot actually do this with GraphQL: https://github.com/orgs/community/discussions/24496
 	// Calculate changed files
 	if ret.PullRequestNumber != 0 {
-		owner, name := ghCtx.Repo()
 		var opts github.ListOptions
 		for {
 			files, resp, err := client.PullRequests.ListFiles(ctx, owner, name, ret.PullRequestNumber, &opts)
@@ -218,7 +234,6 @@ func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, cli
 			opts.Page = resp.NextPage
 		}
 	} else {
-		owner, name := ghCtx.Repo()
 		var opts github.ListOptions
 		for {
 			commit, resp, err := client.Repositories.GetCommit(ctx, owner, name, ret.CommitSha, &opts)
@@ -275,42 +290,79 @@ func sendChange(ctx context.Context, client *slack.Client, change ChangeToSend) 
 	return nil
 }
 
-func CreateChanges(changedFiles []string, changeType ChangeType, prNumber int, commitSha string) ([]ChangeToSend, error) {
+func CreateChangesForFile(ctx context.Context, file string, changeType ChangeType, prNumber int, commitSha string, a ActionStub, ref *RepoReference, client *github.Client) (*ChangeToSend, error) {
+	notification, err := MergeNotificationsForPath(ctx, file, a, ref, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge notifications for path %s: %w", file, err)
+	}
+	if notification == nil {
+		return nil, nil
+	}
+	change := ChangeToSend{
+		ModifiedFiles: []string{file},
+	}
+	switch changeType {
+	case ChangeTypePullRequest:
+		change.PullRequestNumber = prNumber
+		change.Users = notification.PullRequest.Users
+		change.Channel = notification.PullRequest.Channel
+	case ChangeTypeCommit:
+		change.CommitSha = commitSha
+		change.Users = notification.Commit.Users
+		change.Channel = notification.Commit.Channel
+	default:
+		panic(fmt.Sprintf("unknown change type %d", changeType))
+	}
+	if change.Channel == "" {
+		return nil, nil
+	}
+	return &change, nil
+}
+
+func CreateChanges(ctx context.Context, changedFiles []string, changeType ChangeType, prNumber int, commitSha string, a ActionStub, ref *RepoReference, client *github.Client) ([]ChangeToSend, error) {
 	// For each changed file, find the notification file
 	// Merge them together
 	// Create a ChangeToSend for each notification
 	// Return the list of changes
-	changes := make([]ChangeToSend, 0, len(changedFiles))
-	for _, file := range changedFiles {
-		notification, err := MergeNotificationsForPath(file)
-		if err != nil {
-			return nil, fmt.Errorf("failed to merge notifications for path %s: %w", file, err)
-		}
-		if notification == nil {
-			continue
-		}
-		change := ChangeToSend{
-			ModifiedFiles: []string{file},
-		}
-		switch changeType {
-		case ChangeTypePullRequest:
-			change.PullRequestNumber = prNumber
-			change.Users = notification.PullRequest.Users
-			change.Channel = notification.PullRequest.Channel
-		case ChangeTypeCommit:
-			change.CommitSha = commitSha
-			change.Users = notification.Commit.Users
-			change.Channel = notification.Commit.Channel
-		default:
-			panic(fmt.Sprintf("unknown change type %d", changeType))
-		}
-		if change.Channel == "" {
-			continue
-		}
-		changes = append(changes, change)
+	type changeByIndex struct {
+		change *ChangeToSend
+		index  int
 	}
-	changes = mergeCommonChannelChanges(changes)
-	return changes, nil
+	changesByIndex := make([]changeByIndex, 0, len(changedFiles))
+	changesByIndexMu := sync.Mutex{}
+	eg, egCtx := errgroup.WithContext(ctx)
+	for idx, file := range changedFiles {
+		idx := idx
+		file := file
+		eg.Go(func() error {
+			change, err := CreateChangesForFile(egCtx, file, changeType, prNumber, commitSha, a, ref, client)
+			if err != nil {
+				return fmt.Errorf("failed to create change for file %s: %w", file, err)
+			}
+			if change == nil {
+				return nil
+			}
+			changesByIndexMu.Lock()
+			defer changesByIndexMu.Unlock()
+			changesByIndex = append(changesByIndex, changeByIndex{
+				change: change,
+				index:  idx,
+			})
+			return nil
+		})
+
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, fmt.Errorf("failed to create changes: %w", err)
+	}
+	sort.Slice(changesByIndex, func(i, j int) bool {
+		return changesByIndex[i].index < changesByIndex[j].index
+	})
+	ret := make([]ChangeToSend, 0, len(changesByIndex))
+	for _, changeByIndex := range changesByIndex {
+		ret = append(ret, *changeByIndex.change)
+	}
+	return mergeCommonChannelChanges(ret), nil
 }
 
 func mergeCommonChannelChanges(changes []ChangeToSend) []ChangeToSend {
@@ -343,18 +395,36 @@ func removeEmptyAndDeDup(split []string) []string {
 
 const notificationFile = ".action-notify-on-change.yaml"
 
-func MergeNotificationsForPath(path string) (*NotificationFile, error) {
+func MergeNotificationsForPath(ctx context.Context, path string, a ActionStub, ref *RepoReference, client *github.Client) (*NotificationFile, error) {
 	// Walk up the path, looking for notification files
 	// Merge them together
 	// Return the merged notification file
 	path = filepath.Clean(path)
-	var ret NotificationFile
-	for {
-		notification, err := LoadNotificationForPath(path)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load notification for path %s: %w", path, err)
-		}
-		ret.Merge(notification)
+	type loadRetVal struct {
+		idx          int
+		notification *NotificationFile
+	}
+	var i int
+	eg, egCtx := errgroup.WithContext(ctx)
+	allRetValues := make([]loadRetVal, 0, i)
+	var allRetValuesMu sync.Mutex
+	for i = 0; ; i++ {
+		a.Infof("Looking for notification file in %s", path)
+		idx := i
+		loadPath := path
+		eg.Go(func() error {
+			notification, err := LoadNotificationForPath(egCtx, loadPath, ref, client)
+			if err != nil {
+				return fmt.Errorf("failed to load notification for path %s: %w", loadPath, err)
+			}
+			allRetValuesMu.Lock()
+			defer allRetValuesMu.Unlock()
+			allRetValues = append(allRetValues, loadRetVal{
+				idx:          idx,
+				notification: notification,
+			})
+			return nil
+		})
 		if containsStopFile(path) {
 			break
 		}
@@ -365,6 +435,16 @@ func MergeNotificationsForPath(path string) (*NotificationFile, error) {
 			break
 		}
 		path = newPath
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, fmt.Errorf("failed to load notifications: %w", err)
+	}
+	sort.Slice(allRetValues, func(i, j int) bool {
+		return allRetValues[i].idx < allRetValues[j].idx
+	})
+	var ret NotificationFile
+	for _, v := range allRetValues {
+		ret.Merge(v.notification)
 	}
 	return &ret, nil
 }
@@ -377,18 +457,35 @@ func containsStopFile(path string) bool {
 	return err == nil
 }
 
-func LoadNotificationForPath(path string) (*NotificationFile, error) {
+type RepoReference struct {
+	Owner string
+	Repo  string
+	Sha   string
+}
+
+func LoadNotificationForPath(ctx context.Context, path string, ref *RepoReference, client *github.Client) (*NotificationFile, error) {
 	filePath := filepath.Join(path, notificationFile)
-	if _, err := os.Stat(filePath); err != nil && os.IsNotExist(err) {
-		// File does not exist
+	// Note: If we get throttled here, we can cache results
+	fc, dc, res, err := client.Repositories.GetContents(ctx, ref.Owner, ref.Repo, path, &github.RepositoryContentGetOptions{Ref: ref.Sha})
+	if err != nil {
+		if res.StatusCode == 404 {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get contents for %s: %w", path, err)
+	}
+	if dc != nil {
+		// A directory: ignore it
 		return nil, nil
 	}
-	content, err := os.ReadFile(filePath)
+	if fc == nil {
+		return nil, fmt.Errorf("failed to get contents for %s: no file contents", path)
+	}
+	fileContent, err := fc.GetContent()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file %s: %w", filePath, err)
+		return nil, fmt.Errorf("failed to get file content for %s: %w", filePath, err)
 	}
 	var ret NotificationFile
-	if err := yaml.Unmarshal(content, &ret); err != nil {
+	if err := yaml.Unmarshal([]byte(fileContent), &ret); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal file %s: %w", filePath, err)
 	}
 	return &ret, nil
