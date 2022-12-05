@@ -647,6 +647,9 @@ func LoadNotificationForPath(ctx context.Context, path string, ref *RepoReferenc
 	// Note: If we get throttled here, we can cache results
 	fc, dc, res, err := client.Repositories.GetContents(ctx, ref.Owner, ref.Repo, filePath, &github.RepositoryContentGetOptions{Ref: ref.Sha})
 	if err != nil {
+		if res != nil && res.StatusCode == http.StatusNotFound {
+			return &NotificationFile{}, nil
+		}
 		return nil, fmt.Errorf("failed to get contents for %s: %w", path, err)
 	}
 	if res.StatusCode == http.StatusNotFound {
