@@ -389,12 +389,13 @@ func sendChange(ctx context.Context, client *slack.Client, change ChangeToSend) 
 }
 
 func changeSourceText(change ChangeToSend) string {
-	if change.PullRequestNumber != 0 {
-		return "Pull request #" + strconv.Itoa(change.PullRequestNumber)
-	} else if change.Branch != "" {
-		return "Branch " + change.Branch
-	} else if change.CommitSha != "" {
-		return "Commit " + change.CommitSha
+	switch {
+	case change.PullRequestNumber != 0:
+		return fmt.Sprintf("Pull request #%d", change.PullRequestNumber)
+	case change.Branch != "":
+		return fmt.Sprintf("Branch %s", change.Branch)
+	case change.CommitSha != "":
+		return fmt.Sprintf("Commit %s", change.CommitSha)
 	}
 	return ""
 }
