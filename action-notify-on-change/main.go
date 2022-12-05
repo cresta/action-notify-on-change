@@ -645,7 +645,7 @@ type RepoReference struct {
 func LoadNotificationForPath(ctx context.Context, path string, ref *RepoReference, client *github.Client) (*NotificationFile, error) {
 	filePath := filepath.Join(path, notificationFile)
 	// Note: If we get throttled here, we can cache results
-	fc, dc, res, err := client.Repositories.GetContents(ctx, ref.Owner, ref.Repo, path, &github.RepositoryContentGetOptions{Ref: ref.Sha})
+	fc, dc, res, err := client.Repositories.GetContents(ctx, ref.Owner, ref.Repo, filePath, &github.RepositoryContentGetOptions{Ref: ref.Sha})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get contents for %s: %w", path, err)
 	}
