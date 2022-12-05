@@ -212,7 +212,7 @@ type ChangeInput struct {
 	ChangedFiles      []string
 	LinkToChange      string
 	LinkToAuthor      string
-	PullRequestBase   string
+	BaseBranch        string
 	PullRequestNumber int
 	CommitSha         string
 	Owner             string
@@ -264,9 +264,10 @@ func NewGithubGraphQLClient(ctx context.Context, token string) (*githubv4.Client
 func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, client *github.Client) (*ChangeInput, error) {
 	owner, name := ghCtx.Repo()
 	ret := &ChangeInput{
-		Owner:     owner,
-		Name:      name,
-		CommitSha: ghCtx.SHA,
+		Owner:      owner,
+		Name:       name,
+		CommitSha:  ghCtx.SHA,
+		BaseBranch: ghCtx.BaseRef,
 	}
 	if ghCtx.EventName == "pull_request" {
 		rgx := regexp.MustCompile(`^refs/pull/([0-9]+)/merge$`)
@@ -301,8 +302,8 @@ func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, cli
 			if ret.Creator == "" {
 				ret.Creator = prInfo.User.GetLogin()
 			}
-			if ret.PullRequestBase == "" {
-				ret.PullRequestBase = prInfo.GetBase().GetRef()
+			if ret.BaseBranch == "" {
+				ret.BaseBranch = prInfo.GetBase().GetRef()
 			}
 			files, resp, err := client.PullRequests.ListFiles(ctx, owner, name, ret.PullRequestNumber, &opts)
 			if err != nil {
@@ -334,6 +335,9 @@ func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, cli
 			}
 			if ret.LinkToAuthor == "" {
 				ret.LinkToAuthor = commit.GetAuthor().GetHTMLURL()
+			}
+			if ret.BaseBranch == "" {
+				ret.BaseBranch = ghCtx.RefName
 			}
 			if err != nil {
 				return nil, fmt.Errorf("failed to get commit: %w", err)
