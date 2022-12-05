@@ -9,4 +9,4 @@ inputs:
     required: true
 runs:
   using: docker
-  image: 'Dockerfile'
+  image: 'docker://ghcr.io/cresta/action-notify-on-change:v1'
