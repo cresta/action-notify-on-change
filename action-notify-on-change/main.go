@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/go-github/v48/github"
 	"github.com/sethvargo/go-githubactions"
@@ -22,8 +24,81 @@ import (
 )
 
 type NotificationFile struct {
-	PullRequest Notification `yaml:"pullRequest,omitempty"`
-	Commit      Notification `yaml:"commit,omitempty"`
+	PullRequest     Notification `yaml:"pullRequest,omitempty"`
+	Commit          Notification `yaml:"commit,omitempty"`
+	PrettyName      []string     `yaml:"prettyName,omitempty"`
+	MessageTemplate string       `yaml:"messageTemplate,omitempty"`
+	// Parent is the notification file in the Parent directory. If there is none, it's an empty file.
+	Parent      *NotificationFile `yaml:"-"` // This is used to allow us to merge the Parent with the child
+	ChangedFile string            `yaml:"-"` // Which files were changed that caused this notification file to be used
+}
+
+func (f *NotificationFile) ProcessTemplate() (string, error) {
+	if f == nil {
+		return "", nil
+	}
+	parentTemplate, err := f.Parent.ProcessTemplate()
+	if err != nil {
+		return "", fmt.Errorf("failed to process Parent template: %w", err)
+	}
+	t, err := template.New("message").Parse(f.MessageTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template %s: %w", f.MessageTemplate, err)
+	}
+	var b strings.Builder
+	if err := t.Execute(&b, f); err != nil {
+		return "", fmt.Errorf("failed to execute template %s: %w", f.MessageTemplate, err)
+	}
+	ret := b.String()
+	if parentTemplate != "" {
+		ret = parentTemplate + " - " + ret
+	}
+	return ret, nil
+}
+
+func (f *NotificationFile) AllUsers(changeType ChangeType) []string {
+	if f == nil {
+		return nil
+	}
+	users := f.Users(changeType)
+	if f.Parent != nil {
+		users = append(users, f.Parent.AllUsers(changeType)...)
+	}
+	return deduplicate(users)
+}
+
+func (f *NotificationFile) Users(changeType ChangeType) []string {
+	if f == nil {
+		return nil
+	}
+	switch changeType {
+	case ChangeTypeCommit:
+		return f.Commit.Users
+	case ChangeTypePullRequest:
+		return f.PullRequest.Users
+	default:
+		panic("unknown change type")
+	}
+}
+
+func (f *NotificationFile) Channel(changeType ChangeType) string {
+	if f == nil {
+		return ""
+	}
+	switch changeType {
+	case ChangeTypeCommit:
+		if f.Commit.Channel != "" {
+			return f.Commit.Channel
+		}
+		return f.Parent.Channel(changeType)
+	case ChangeTypePullRequest:
+		if f.PullRequest.Channel != "" {
+			return f.PullRequest.Channel
+		}
+		return f.Parent.Channel(changeType)
+	default:
+		panic("unknown change type")
+	}
 }
 
 type Notification struct {
@@ -34,28 +109,24 @@ type Notification struct {
 }
 
 type ChangeToSend struct {
-	Channel           string   // Which Slack channel to send the notification to
-	Users             []string // Users to tag in the notification
-	ModifiedFiles     []string // Files that were modified
-	PullRequestNumber int      // Only set if this is a pull request
-	CommitSha         string   // Only set if this is not a pull request, but a commit
-	Message           string   // The message to send (Extra part of the Slack notification)
+	Channel           string    // Which Slack channel to send the notification to
+	Users             []string  // Users to tag in the notification
+	ModifiedFiles     []string  // Files that were modified
+	PullRequestNumber int       // Only set if this is a pull request
+	Branch            string    // Only set if this is a commit in a branch
+	CommitSha         string    // Only set if this is not a pull request, but a commit
+	Creator           string    // The user that created the pull request or commit
+	Timestamp         time.Time // The time the pull request or commit was created
+	LinkToChange      string    // Link to the pull request or commit
+	LinkToAuthor      string    // Link to the user that created the pull request or commit
+	Message           string    // The message to send (Extra part of the Slack notification)
 }
 
 func (s ChangeToSend) merge(from ChangeToSend) ChangeToSend {
 	s.ModifiedFiles = deduplicate(append(s.ModifiedFiles, from.ModifiedFiles...))
 	s.Users = deduplicate(append(s.Users, from.Users...))
+	s.Message = s.Message + "\n" + from.Message
 	return s
-}
-
-func (n *Notification) Merge(n2 *Notification) {
-	if n2 == nil {
-		return
-	}
-	if n2.Channel != "" {
-		n.Channel = n2.Channel
-	}
-	n.Users = deduplicate(append(n.Users, n2.Users...))
 }
 
 func deduplicate(strings []string) []string {
@@ -69,14 +140,6 @@ func deduplicate(strings []string) []string {
 		ret = append(ret, s)
 	}
 	return ret
-}
-
-func (f *NotificationFile) Merge(notification *NotificationFile) {
-	if notification == nil {
-		return
-	}
-	f.PullRequest.Merge(&notification.PullRequest)
-	f.Commit.Merge(&notification.Commit)
 }
 
 func main() {
@@ -133,7 +196,7 @@ func (l *Logic) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to create slack client: %w", err)
 	}
 	l.Action.Infof("Created slack client")
-	changes, err := CreateChanges(ctx, changedFiles, ChangeTypePullRequest, input.PullRequestNumber, input.CommitSha, l.Action, input.RepoReference(), ghClient)
+	changes, err := CreateChanges(ctx, changedFiles, ChangeTypePullRequest, input.PullRequestNumber, input.CommitSha, l.Action, input.RepoReference(), ghClient, input)
 	if err != nil {
 		return fmt.Errorf("failed to create changes: %w", err)
 	}
@@ -147,10 +210,14 @@ func (l *Logic) Run(ctx context.Context) error {
 
 type ChangeInput struct {
 	ChangedFiles      []string
+	LinkToChange      string
+	LinkToAuthor      string
+	PullRequestBase   string
 	PullRequestNumber int
 	CommitSha         string
 	Owner             string
 	Name              string
+	Creator           string
 }
 
 func (i ChangeInput) RepoReference() *RepoReference {
@@ -218,6 +285,25 @@ func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, cli
 	if ret.PullRequestNumber != 0 {
 		var opts github.ListOptions
 		for {
+			prInfo, resp, err := client.PullRequests.Get(ctx, owner, name, ret.PullRequestNumber)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get pull request info: %w", err)
+			}
+			if resp.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("failed to get pull request info: %d", resp.StatusCode)
+			}
+			if ret.LinkToChange == "" {
+				ret.LinkToChange = prInfo.GetHTMLURL()
+			}
+			if ret.LinkToAuthor == "" {
+				ret.LinkToAuthor = prInfo.User.GetHTMLURL()
+			}
+			if ret.Creator == "" {
+				ret.Creator = prInfo.User.GetLogin()
+			}
+			if ret.PullRequestBase == "" {
+				ret.PullRequestBase = prInfo.GetBase().GetRef()
+			}
 			files, resp, err := client.PullRequests.ListFiles(ctx, owner, name, ret.PullRequestNumber, &opts)
 			if err != nil {
 				return nil, fmt.Errorf("failed to list pull request files: %w", err)
@@ -237,6 +323,18 @@ func CalculateInput(ctx context.Context, ghCtx *githubactions.GitHubContext, cli
 		var opts github.ListOptions
 		for {
 			commit, resp, err := client.Repositories.GetCommit(ctx, owner, name, ret.CommitSha, &opts)
+			if ret.CommitSha == "" {
+				ret.CommitSha = commit.GetSHA()
+			}
+			if ret.Creator == "" {
+				ret.Creator = commit.GetAuthor().GetLogin()
+			}
+			if ret.LinkToChange == "" {
+				ret.LinkToChange = commit.GetHTMLURL()
+			}
+			if ret.LinkToAuthor == "" {
+				ret.LinkToAuthor = commit.GetAuthor().GetHTMLURL()
+			}
 			if err != nil {
 				return nil, fmt.Errorf("failed to get commit: %w", err)
 			}
@@ -282,7 +380,7 @@ func newSlackClient(token string, action ActionStub) (*slack.Client, error) {
 }
 
 func sendChange(ctx context.Context, client *slack.Client, change ChangeToSend) error {
-	channel, ts, text, err := client.SendMessageContext(ctx, change.Channel, slack.MsgOptionText(fmt.Sprintf("Files changed: %s", strings.Join(change.ModifiedFiles, ", ")), false))
+	channel, ts, text, err := client.SendMessageContext(ctx, change.Channel, createSlackMessage(change), slack.MsgOptionDisableLinkUnfurl(), slack.MsgOptionDisableMediaUnfurl())
 	if err != nil {
 		return fmt.Errorf("failed to send message to channel %s: %w", change.Channel, err)
 	}
@@ -290,7 +388,70 @@ func sendChange(ctx context.Context, client *slack.Client, change ChangeToSend) 
 	return nil
 }
 
-func CreateChangesForFile(ctx context.Context, file string, changeType ChangeType, prNumber int, commitSha string, a ActionStub, ref *RepoReference, client *github.Client) (*ChangeToSend, error) {
+func changeSourceText(change ChangeToSend) string {
+	if change.PullRequestNumber != 0 {
+		return "Pull request #" + strconv.Itoa(change.PullRequestNumber)
+	} else if change.Branch != "" {
+		return "Branch " + change.Branch
+	} else if change.CommitSha != "" {
+		return "Commit " + change.CommitSha
+	}
+	return ""
+}
+
+func createSlackMessage(change ChangeToSend) slack.MsgOption {
+	var blocks []slack.Block
+	// https://api.slack.com/reference/block-kit/composition-objects#text
+	blocks = append(blocks,
+		slack.NewSectionBlock(
+			slack.NewTextBlockObject("plain_text", "Content change notification", false, false), nil, nil),
+	)
+	sourceText := changeSourceText(change)
+	if sourceText != "" {
+		var field *slack.TextBlockObject
+		if change.LinkToChange != "" {
+			field = slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("Source: <%s|%s>", change.LinkToChange, sourceText), false, false)
+		} else {
+			field = slack.NewTextBlockObject("plain_text", fmt.Sprintf("Source: %s", sourceText), false, false)
+		}
+		blocks = append(blocks,
+			slack.NewSectionBlock(field, nil, nil),
+		)
+	}
+	if change.Creator != "" {
+		var field *slack.TextBlockObject
+		if change.LinkToAuthor != "" {
+			field = slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("Author: <%s|%s>", change.LinkToAuthor, change.Creator), false, false)
+		} else {
+			field = slack.NewTextBlockObject("plain_text", fmt.Sprintf("Author: %s", change.Creator), false, false)
+		}
+		blocks = append(blocks, slack.NewSectionBlock(
+			field,
+			nil, nil,
+		))
+	}
+	if len(change.ModifiedFiles) > 0 {
+		blocks = append(blocks, slack.NewSectionBlock(
+			slack.NewTextBlockObject("mrkdwn", "Modified files:", false, false),
+			nil, nil,
+		))
+		for _, file := range change.ModifiedFiles {
+			blocks = append(blocks, slack.NewSectionBlock(
+				slack.NewTextBlockObject("mrkdwn", file, false, false),
+				nil, nil,
+			))
+		}
+	}
+	if change.Message != "" {
+		blocks = append(blocks, slack.NewSectionBlock(
+			slack.NewTextBlockObject("mrkdwn", change.Message, false, false),
+			nil, nil,
+		))
+	}
+	return slack.MsgOptionBlocks(blocks...)
+}
+
+func CreateChangesForFile(ctx context.Context, file string, changeType ChangeType, prNumber int, commitSha string, a ActionStub, ref *RepoReference, client *github.Client, input *ChangeInput) (*ChangeToSend, error) {
 	notification, err := MergeNotificationsForPath(ctx, file, a, ref, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to merge notifications for path %s: %w", file, err)
@@ -298,18 +459,27 @@ func CreateChangesForFile(ctx context.Context, file string, changeType ChangeTyp
 	if notification == nil {
 		return nil, nil
 	}
+	notifMsg, err := notification.ProcessTemplate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to process template for notification %v: %w", notification, err)
+	}
+
 	change := ChangeToSend{
 		ModifiedFiles: []string{file},
+		Message:       notifMsg,
+		CommitSha:     commitSha,
+		Creator:       input.Creator,
+		LinkToChange:  input.LinkToChange,
+		LinkToAuthor:  input.LinkToAuthor,
 	}
 	switch changeType {
 	case ChangeTypePullRequest:
 		change.PullRequestNumber = prNumber
-		change.Users = notification.PullRequest.Users
-		change.Channel = notification.PullRequest.Channel
+		change.Users = notification.AllUsers(changeType)
+		change.Channel = notification.Channel(changeType)
 	case ChangeTypeCommit:
-		change.CommitSha = commitSha
-		change.Users = notification.Commit.Users
-		change.Channel = notification.Commit.Channel
+		change.Users = notification.AllUsers(changeType)
+		change.Channel = notification.Channel(changeType)
 	default:
 		panic(fmt.Sprintf("unknown change type %d", changeType))
 	}
@@ -319,7 +489,7 @@ func CreateChangesForFile(ctx context.Context, file string, changeType ChangeTyp
 	return &change, nil
 }
 
-func CreateChanges(ctx context.Context, changedFiles []string, changeType ChangeType, prNumber int, commitSha string, a ActionStub, ref *RepoReference, client *github.Client) ([]ChangeToSend, error) {
+func CreateChanges(ctx context.Context, changedFiles []string, changeType ChangeType, prNumber int, commitSha string, a ActionStub, ref *RepoReference, client *github.Client, input *ChangeInput) ([]ChangeToSend, error) {
 	// For each changed file, find the notification file
 	// Merge them together
 	// Create a ChangeToSend for each notification
@@ -335,7 +505,7 @@ func CreateChanges(ctx context.Context, changedFiles []string, changeType Change
 		idx := idx
 		file := file
 		eg.Go(func() error {
-			change, err := CreateChangesForFile(egCtx, file, changeType, prNumber, commitSha, a, ref, client)
+			change, err := CreateChangesForFile(egCtx, file, changeType, prNumber, commitSha, a, ref, client, input)
 			if err != nil {
 				return fmt.Errorf("failed to create change for file %s: %w", file, err)
 			}
@@ -400,13 +570,14 @@ func MergeNotificationsForPath(ctx context.Context, path string, a ActionStub, r
 	// Merge them together
 	// Return the merged notification file
 	path = filepath.Clean(path)
+	rootPath := path
 	type loadRetVal struct {
 		idx          int
 		notification *NotificationFile
 	}
 	var i int
 	eg, egCtx := errgroup.WithContext(ctx)
-	allRetValues := make([]loadRetVal, 0, i)
+	allRetValues := make([]loadRetVal, 0, 10)
 	var allRetValuesMu sync.Mutex
 	for i = 0; ; i++ {
 		a.Infof("Looking for notification file in %s", path)
@@ -416,6 +587,9 @@ func MergeNotificationsForPath(ctx context.Context, path string, a ActionStub, r
 			notification, err := LoadNotificationForPath(egCtx, loadPath, ref, client)
 			if err != nil {
 				return fmt.Errorf("failed to load notification for path %s: %w", loadPath, err)
+			}
+			if notification != nil {
+				notification.ChangedFile = rootPath
 			}
 			allRetValuesMu.Lock()
 			defer allRetValuesMu.Unlock()
@@ -442,11 +616,11 @@ func MergeNotificationsForPath(ctx context.Context, path string, a ActionStub, r
 	sort.Slice(allRetValues, func(i, j int) bool {
 		return allRetValues[i].idx < allRetValues[j].idx
 	})
-	var ret NotificationFile
-	for _, v := range allRetValues {
-		ret.Merge(v.notification)
+	ret := allRetValues[0].notification
+	for idx := 1; idx < len(allRetValues); idx++ {
+		allRetValues[idx].notification.Parent = allRetValues[idx-1].notification
 	}
-	return &ret, nil
+	return ret, nil
 }
 
 func containsStopFile(path string) bool {
@@ -469,13 +643,13 @@ func LoadNotificationForPath(ctx context.Context, path string, ref *RepoReferenc
 	fc, dc, res, err := client.Repositories.GetContents(ctx, ref.Owner, ref.Repo, path, &github.RepositoryContentGetOptions{Ref: ref.Sha})
 	if err != nil {
 		if res.StatusCode == 404 {
-			return nil, nil
+			return &NotificationFile{}, nil
 		}
 		return nil, fmt.Errorf("failed to get contents for %s: %w", path, err)
 	}
 	if dc != nil {
 		// A directory: ignore it
-		return nil, nil
+		return &NotificationFile{}, nil
 	}
 	if fc == nil {
 		return nil, fmt.Errorf("failed to get contents for %s: no file contents", path)
