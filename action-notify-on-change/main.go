@@ -101,6 +101,10 @@ func (f *NotificationFile) Channel(changeType ChangeType) string {
 	}
 }
 
+func (f *NotificationFile) String() string {
+	return fmt.Sprintf("NotificationFile{PullRequest:%v,Commit:%v,PrettyName:%v,MessageTemplate:%v,Parent:%v,ChangedFile:%v}", f.PullRequest, f.Commit, f.PrettyName, f.MessageTemplate, f.Parent, f.ChangedFile)
+}
+
 type Notification struct {
 	// Which Slack channel to notify on a change
 	Channel string `yaml:"channel,omitempty"`
@@ -623,7 +627,7 @@ func MergeNotificationsForPath(ctx context.Context, path string, a ActionStub, r
 	})
 	ret := allRetValues[0].notification
 	for idx := 1; idx < len(allRetValues); idx++ {
-		allRetValues[idx].notification.Parent = allRetValues[idx-1].notification
+		allRetValues[idx-1].notification.Parent = allRetValues[idx].notification
 	}
 	return ret, nil
 }
