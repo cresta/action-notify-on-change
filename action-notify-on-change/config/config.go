@@ -1,0 +1,14 @@
+package config
+
+type Config struct {
+	GithubToken       string
+	SlackToken        string
+	CommitSha         string
+	RepoOwner         string
+	RepoName          string
+	BaseBranch        string
+	Ref               string
+	EventName         string
+	RefName           string
+	PullRequestNumber int
+}
