@@ -2,9 +2,12 @@ package notificationfile
 
 import (
 	"fmt"
-	"github.com/cresta/action-notify-on-change/action-notify-on-change/stringhelper"
 	"html/template"
 	"strings"
+
+	"github.com/cresta/action-notify-on-change/action-notify-on-change/config"
+
+	"github.com/cresta/action-notify-on-change/action-notify-on-change/stringhelper"
 )
 
 type NotificationFile struct {
@@ -16,13 +19,6 @@ type NotificationFile struct {
 	Parent      *NotificationFile `yaml:"-"` // This is used to allow us to merge the Parent with the child
 	ChangedFile string            `yaml:"-"` // Which files were changed that caused this notification file to be used
 }
-
-type ChangeType int
-
-const (
-	ChangeTypePullRequest ChangeType = iota
-	ChangeTypeCommit
-)
 
 type Notification struct {
 	// Which Slack channel to notify on a change
@@ -54,7 +50,7 @@ func (f *NotificationFile) ProcessTemplate() (string, error) {
 	return ret, nil
 }
 
-func (f *NotificationFile) AllUsers(changeType ChangeType) []string {
+func (f *NotificationFile) AllUsers(changeType config.ChangeType) []string {
 	if f == nil {
 		return nil
 	}
@@ -65,31 +61,31 @@ func (f *NotificationFile) AllUsers(changeType ChangeType) []string {
 	return stringhelper.Deduplicate(users)
 }
 
-func (f *NotificationFile) Users(changeType ChangeType) []string {
+func (f *NotificationFile) Users(changeType config.ChangeType) []string {
 	if f == nil {
 		return nil
 	}
 	switch changeType {
-	case ChangeTypeCommit:
+	case config.ChangeTypeCommit:
 		return f.Commit.Users
-	case ChangeTypePullRequest:
+	case config.ChangeTypePullRequest:
 		return f.PullRequest.Users
 	default:
 		panic("unknown change type")
 	}
 }
 
-func (f *NotificationFile) Channel(changeType ChangeType) string {
+func (f *NotificationFile) Channel(changeType config.ChangeType) string {
 	if f == nil {
 		return ""
 	}
 	switch changeType {
-	case ChangeTypeCommit:
+	case config.ChangeTypeCommit:
 		if f.Commit.Channel != "" {
 			return f.Commit.Channel
 		}
 		return f.Parent.Channel(changeType)
-	case ChangeTypePullRequest:
+	case config.ChangeTypePullRequest:
 		if f.PullRequest.Channel != "" {
 			return f.PullRequest.Channel
 		}

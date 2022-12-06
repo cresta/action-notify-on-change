@@ -16,6 +16,7 @@ func New(action *githubactions.Action) (config.Config, error) {
 	}
 	ghOwner, ghName := ghCtx.Repo()
 	prNumber := 0
+	ct := config.ChangeTypeCommit
 	if ghCtx.EventName == "pull_request" {
 		rgx := regexp.MustCompile(`^refs/pull/([0-9]+)/merge$`)
 		matches := rgx.FindStringSubmatch(ghCtx.Ref)
@@ -27,6 +28,7 @@ func New(action *githubactions.Action) (config.Config, error) {
 		if err != nil {
 			return config.Config{}, fmt.Errorf("failed to parse pull request number from ref %s: %w", ghCtx.Ref, err)
 		}
+		ct = config.ChangeTypePullRequest
 	}
 	return config.Config{
 		GithubToken:       action.GetInput("github-token"),
@@ -39,5 +41,6 @@ func New(action *githubactions.Action) (config.Config, error) {
 		EventName:         ghCtx.EventName,
 		RefName:           ghCtx.RefName,
 		PullRequestNumber: prNumber,
+		ChangeType:        ct,
 	}, nil
 }

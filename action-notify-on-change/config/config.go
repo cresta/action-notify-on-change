@@ -11,4 +11,12 @@ type Config struct {
 	EventName         string
 	RefName           string
 	PullRequestNumber int
+	ChangeType        ChangeType
 }
+
+type ChangeType int
+
+const (
+	ChangeTypePullRequest ChangeType = iota
+	ChangeTypeCommit
+)

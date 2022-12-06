@@ -12,3 +12,12 @@ func Deduplicate(strings []string) []string {
 	}
 	return ret
 }
+func RemoveEmptyAndDeDup(split []string) []string {
+	ret := make([]string, 0, len(split))
+	for _, s := range split {
+		if s != "" {
+			ret = append(ret, s)
+		}
+	}
+	return Deduplicate(ret)
+}
