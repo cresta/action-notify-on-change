@@ -478,6 +478,7 @@ func CreateChangesForFile(ctx context.Context, file string, changeType ChangeTyp
 		Message:       notifMsg,
 		CommitSha:     commitSha,
 		Creator:       input.Creator,
+		Branch:        input.BaseBranch,
 		LinkToChange:  input.LinkToChange,
 		LinkToAuthor:  input.LinkToAuthor,
 	}
