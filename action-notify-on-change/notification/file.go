@@ -25,6 +25,7 @@ type Notification struct {
 	Channel string `yaml:"channel,omitempty"`
 	// Which users to tag in the notification
 	Users           []string `yaml:"users,omitempty"`
+	Groups          []string `yaml:"groups,omitempty"`
 	MessageTemplate string   `yaml:"messageTemplate,omitempty"`
 }
 
@@ -74,6 +75,17 @@ func (f *File) AllUsers(changeType config.ChangeType) []string {
 	return stringhelper.Deduplicate(users)
 }
 
+func (f *File) AllGroups(changeType config.ChangeType) []string {
+	if f == nil {
+		return nil
+	}
+	groups := f.Groups(changeType)
+	if f.Parent != nil {
+		groups = append(groups, f.Parent.AllGroups(changeType)...)
+	}
+	return stringhelper.Deduplicate(groups)
+}
+
 func (f *File) Users(changeType config.ChangeType) []string {
 	if f == nil {
 		return nil
@@ -83,6 +95,20 @@ func (f *File) Users(changeType config.ChangeType) []string {
 		return f.Commit.Users
 	case config.ChangeTypePullRequest:
 		return f.PullRequest.Users
+	default:
+		panic("unknown change type")
+	}
+}
+
+func (f *File) Groups(changeType config.ChangeType) []string {
+	if f == nil {
+		return nil
+	}
+	switch changeType {
+	case config.ChangeTypeCommit:
+		return f.Commit.Groups
+	case config.ChangeTypePullRequest:
+		return f.PullRequest.Groups
 	default:
 		panic("unknown change type")
 	}

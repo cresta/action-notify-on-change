@@ -35,9 +35,15 @@ var _ Sender = (*SlackDestination)(nil)
 func (s *SlackDestination) SendMessage(ctx context.Context, change ChangeToSend) error {
 	s.logger.Infof("Sending slack message for change")
 	userMap := s.mapOfUsersByEmail(ctx, change.Users)
-	channel, ts, text, err := s.client.SendMessageContext(ctx, change.Channel, createSlackMessage(change, userMap), slack.MsgOptionDisableLinkUnfurl(), slack.MsgOptionDisableMediaUnfurl(), slack.MsgOptionText("Content change notification", false))
+	channel, ts, text, err := s.client.SendMessageContext(ctx, change.Channel, createSlackMessage(change), slack.MsgOptionDisableLinkUnfurl(), slack.MsgOptionDisableMediaUnfurl(), slack.MsgOptionText("Content change notification", false))
 	if err != nil {
 		return fmt.Errorf("failed to send message to channel %s: %w", change.Channel, err)
+	}
+	if len(change.Users) > 0 {
+		_, _, _, err = s.client.SendMessageContext(ctx, change.Channel, createUsersMessage(change, userMap), slack.MsgOptionTS(ts), slack.MsgOptionDisableLinkUnfurl(), slack.MsgOptionDisableMediaUnfurl(), slack.MsgOptionText("Content change notification", false))
+		if err != nil {
+			return fmt.Errorf("failed to send message to channel %s: %w", change.Channel, err)
+		}
 	}
 	_, _, _ = channel, ts, text
 	return nil
@@ -72,7 +78,27 @@ func changeSourceText(change ChangeToSend) string {
 	return ""
 }
 
-func createSlackMessage(change ChangeToSend, userMap map[string]*slack.User) slack.MsgOption {
+func createUsersMessage(change ChangeToSend, userMap map[string]*slack.User) slack.MsgOption {
+	var blocks []slack.Block
+	header := slack.NewTextBlockObject("mrkdwn", "*Subscribers:*", false, false)
+	// Mention each user by their email
+	allUsers := make([]string, 0, len(change.Users))
+	for _, user := range change.Users {
+		userText := slackutilsx.EscapeMessage(user)
+		if u, ok := userMap[user]; ok {
+			userText = fmt.Sprintf("<@%s|%s>", u.ID, slackutilsx.EscapeMessage(u.Name))
+		}
+		allUsers = append(allUsers, userText)
+	}
+	for _, group := range change.Groups {
+		allUsers = append(allUsers, fmt.Sprintf("@%s", group))
+	}
+	txtBlock := slack.NewTextBlockObject("mrkdwn", strings.Join(allUsers, ", "), false, false)
+	blocks = append(blocks, slack.NewSectionBlock(header, []*slack.TextBlockObject{txtBlock}, nil))
+	return slack.MsgOptionBlocks(blocks...)
+}
+
+func createSlackMessage(change ChangeToSend) slack.MsgOption {
 	var blocks []slack.Block
 	// https://api.slack.com/reference/block-kit/composition-objects#text
 	blocks = append(blocks,
@@ -101,30 +127,19 @@ func createSlackMessage(change ChangeToSend, userMap map[string]*slack.User) sla
 	blocks = append(blocks, slack.NewSectionBlock(nil, []*slack.TextBlockObject{sourceTextBlock, creatorTextBlock}, nil))
 	if len(change.ModifiedFiles) > 0 {
 		header := slack.NewTextBlockObject("mrkdwn", "*Modified files:*", false, false)
-		fileTextBlocks := make([]*slack.TextBlockObject, 0, len(change.ModifiedFiles))
+		filesMonospace := make([]string, 0, len(change.ModifiedFiles))
 		for _, file := range change.ModifiedFiles {
-			fileTextBlocks = append(fileTextBlocks, slack.NewTextBlockObject("plain_text", file, false, false))
+			filesMonospace = append(filesMonospace, file)
 		}
-		blocks = append(blocks, slack.NewSectionBlock(header, fileTextBlocks, nil))
+		monoTextBlock := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("\n```\n%s\n```\n", strings.Join(filesMonospace, "\n")), false, false)
+		blocks = append(blocks, slack.NewSectionBlock(header, []*slack.TextBlockObject{monoTextBlock}, nil))
 	}
 	if change.Message != "" {
+		header := slack.NewTextBlockObject("mrkdwn", "*Custom Message:*", false, false)
 		blocks = append(blocks, slack.NewSectionBlock(
-			slack.NewTextBlockObject("mrkdwn", change.Message, false, false),
-			nil, nil,
-		))
-	}
-	if len(change.Users) > 0 {
-		header := slack.NewTextBlockObject("mrkdwn", "*Subscribers:*", false, false)
-		// Mention each user by their email
-		userTextBlocks := make([]*slack.TextBlockObject, 0, len(change.Users))
-		for _, user := range change.Users {
-			userText := slackutilsx.EscapeMessage(user)
-			if u, ok := userMap[user]; ok {
-				userText = fmt.Sprintf("<@%s|%s>", u.ID, slackutilsx.EscapeMessage(u.Name))
-			}
-			userTextBlocks = append(userTextBlocks, slack.NewTextBlockObject("mrkdwn", userText, false, false))
-		}
-		blocks = append(blocks, slack.NewSectionBlock(header, userTextBlocks, nil))
+			header, []*slack.TextBlockObject{
+				slack.NewTextBlockObject("mrkdwn", change.Message, false, false),
+			}, nil))
 	}
 	return slack.MsgOptionBlocks(blocks...)
 }

@@ -107,16 +107,14 @@ func (c *Creator) CreateChangesForFile(ctx context.Context, file string) (*Chang
 		LinkToChange:  c.annotatedInfo.LinkToChange,
 		LinkToAuthor:  c.annotatedInfo.LinkToAuthor,
 	}
-	switch c.cfg.ChangeType {
-	case config.ChangeTypePullRequest:
+	change.Users = notif.AllUsers(c.cfg.ChangeType)
+	change.Groups = notif.AllGroups(c.cfg.ChangeType)
+	change.Channel = notif.Channel(c.cfg.ChangeType)
+	if c.cfg.RefName != "" {
+		change.Branch = c.cfg.RefName
+	}
+	if c.cfg.ChangeType == config.ChangeTypePullRequest {
 		change.PullRequestNumber = c.cfg.PullRequestNumber
-		change.Users = notif.AllUsers(c.cfg.ChangeType)
-		change.Channel = notif.Channel(c.cfg.ChangeType)
-	case config.ChangeTypeCommit:
-		change.Users = notif.AllUsers(c.cfg.ChangeType)
-		change.Channel = notif.Channel(c.cfg.ChangeType)
-	default:
-		panic(fmt.Sprintf("unknown change type %d", c.cfg.ChangeType))
 	}
 	if change.Channel == "" {
 		return nil, nil
