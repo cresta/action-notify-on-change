@@ -127,11 +127,7 @@ func createSlackMessage(change ChangeToSend) slack.MsgOption {
 	blocks = append(blocks, slack.NewSectionBlock(nil, []*slack.TextBlockObject{sourceTextBlock, creatorTextBlock}, nil))
 	if len(change.ModifiedFiles) > 0 {
 		header := slack.NewTextBlockObject("mrkdwn", "*Modified files:*", false, false)
-		filesMonospace := make([]string, 0, len(change.ModifiedFiles))
-		for _, file := range change.ModifiedFiles {
-			filesMonospace = append(filesMonospace, file)
-		}
-		monoTextBlock := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("\n```\n%s\n```\n", strings.Join(filesMonospace, "\n")), false, false)
+		monoTextBlock := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("\n```\n%s\n```\n", strings.Join(change.ModifiedFiles, "\n")), false, false)
 		blocks = append(blocks, slack.NewSectionBlock(header, []*slack.TextBlockObject{monoTextBlock}, nil))
 	}
 	if change.Message != "" {
