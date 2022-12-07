@@ -7,7 +7,7 @@ COPY go.sum .
 RUN go mod download
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -tags netgo -ldflags '-w' -o /action-notify-on-change ./main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -tags netgo -ldflags '-w' -o /action-notify-on-change ./*.go
 
 FROM scratch
 COPY --from=build /action-notify-on-change /action-notify-on-change
