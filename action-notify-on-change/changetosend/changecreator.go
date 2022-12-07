@@ -3,15 +3,14 @@ package changetosend
 import (
 	"context"
 	"fmt"
-	"github.com/cresta/action-notify-on-change/action-notify-on-change/logger"
 	"sort"
 	"sync"
-
-	"github.com/cresta/action-notify-on-change/action-notify-on-change/notification"
 
 	"github.com/cresta/action-notify-on-change/action-notify-on-change/annotatedinfo"
 	"github.com/cresta/action-notify-on-change/action-notify-on-change/config"
 	"github.com/cresta/action-notify-on-change/action-notify-on-change/ghclient"
+	"github.com/cresta/action-notify-on-change/action-notify-on-change/logger"
+	"github.com/cresta/action-notify-on-change/action-notify-on-change/notification"
 	"golang.org/x/sync/errgroup"
 )
 
