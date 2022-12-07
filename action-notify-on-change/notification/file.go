@@ -1,4 +1,4 @@
-package notificationfile
+package notification
 
 import (
 	"fmt"
@@ -10,32 +10,45 @@ import (
 	"github.com/cresta/action-notify-on-change/action-notify-on-change/stringhelper"
 )
 
-type NotificationFile struct {
+type File struct {
 	PullRequest     Notification `yaml:"pullRequest,omitempty"`
 	Commit          Notification `yaml:"commit,omitempty"`
 	PrettyName      []string     `yaml:"prettyName,omitempty"`
 	MessageTemplate string       `yaml:"messageTemplate,omitempty"`
 	// Parent is the notification file in the Parent directory. If there is none, it's an empty file.
-	Parent      *NotificationFile `yaml:"-"` // This is used to allow us to merge the Parent with the child
-	ChangedFile string            `yaml:"-"` // Which files were changed that caused this notification file to be used
+	Parent      *File  `yaml:"-"` // This is used to allow us to merge the Parent with the child
+	ChangedFile string `yaml:"-"` // Which files were changed that caused this notification file to be used
 }
 
 type Notification struct {
 	// Which Slack channel to notify on a change
 	Channel string `yaml:"channel,omitempty"`
 	// Which users to tag in the notification
-	Users []string `yaml:"users,omitempty"`
+	Users           []string `yaml:"users,omitempty"`
+	MessageTemplate string   `yaml:"messageTemplate,omitempty"`
 }
 
-func (f *NotificationFile) ProcessTemplate() (string, error) {
+func (f *File) ProcessTemplate(changeType config.ChangeType) (string, error) {
 	if f == nil {
 		return "", nil
 	}
-	parentTemplate, err := f.Parent.ProcessTemplate()
+	parentTemplate, err := f.Parent.ProcessTemplate(changeType)
 	if err != nil {
 		return "", fmt.Errorf("failed to process Parent template: %w", err)
 	}
-	t, err := template.New("message").Parse(f.MessageTemplate)
+	var messageTemplate string
+	if changeType == config.ChangeTypeCommit {
+		messageTemplate = f.Commit.MessageTemplate
+	} else {
+		messageTemplate = f.PullRequest.MessageTemplate
+	}
+	if messageTemplate == "" {
+		messageTemplate = f.MessageTemplate
+	}
+	if messageTemplate == "" {
+		return parentTemplate, nil
+	}
+	t, err := template.New("message").Parse(messageTemplate)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template %s: %w", f.MessageTemplate, err)
 	}
@@ -50,7 +63,7 @@ func (f *NotificationFile) ProcessTemplate() (string, error) {
 	return ret, nil
 }
 
-func (f *NotificationFile) AllUsers(changeType config.ChangeType) []string {
+func (f *File) AllUsers(changeType config.ChangeType) []string {
 	if f == nil {
 		return nil
 	}
@@ -61,7 +74,7 @@ func (f *NotificationFile) AllUsers(changeType config.ChangeType) []string {
 	return stringhelper.Deduplicate(users)
 }
 
-func (f *NotificationFile) Users(changeType config.ChangeType) []string {
+func (f *File) Users(changeType config.ChangeType) []string {
 	if f == nil {
 		return nil
 	}
@@ -75,7 +88,7 @@ func (f *NotificationFile) Users(changeType config.ChangeType) []string {
 	}
 }
 
-func (f *NotificationFile) Channel(changeType config.ChangeType) string {
+func (f *File) Channel(changeType config.ChangeType) string {
 	if f == nil {
 		return ""
 	}
@@ -95,6 +108,6 @@ func (f *NotificationFile) Channel(changeType config.ChangeType) string {
 	}
 }
 
-func (f *NotificationFile) String() string {
-	return fmt.Sprintf("NotificationFile{PullRequest:%v,Commit:%v,PrettyName:%v,MessageTemplate:%v,Parent:%v,ChangedFile:%v}", f.PullRequest, f.Commit, f.PrettyName, f.MessageTemplate, f.Parent, f.ChangedFile)
+func (f *File) String() string {
+	return fmt.Sprintf("File{PullRequest:%v,Commit:%v,PrettyName:%v,MessageTemplate:%v,Parent:%v,ChangedFile:%v}", f.PullRequest, f.Commit, f.PrettyName, f.MessageTemplate, f.Parent, f.ChangedFile)
 }

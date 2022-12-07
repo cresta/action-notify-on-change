@@ -1,20 +1,24 @@
-package notificationmerger
+package notification
 
 import (
 	"context"
 	"fmt"
-	"github.com/cresta/action-notify-on-change/action-notify-on-change/notificationfile/notificationloader"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
 
-	"github.com/cresta/action-notify-on-change/action-notify-on-change/notificationfile"
 	"golang.org/x/sync/errgroup"
 )
 
-type NotificationMerger struct {
-	NotificationLoader *notificationloader.NotificationLoader
+type Merger struct {
+	NotificationLoader *Loader
+}
+
+func NewMerger(notificationLoader *Loader) *Merger {
+	return &Merger{
+		NotificationLoader: notificationLoader,
+	}
 }
 
 func containsStopFile(path string) bool {
@@ -25,7 +29,7 @@ func containsStopFile(path string) bool {
 	return err == nil
 }
 
-func (n *NotificationMerger) Merge(ctx context.Context, path string) (*notificationfile.NotificationFile, error) {
+func (n *Merger) Merge(ctx context.Context, path string) (*File, error) {
 	// Walk up the path, looking for notification files
 	// Merge them together
 	// Return the merged notification file
@@ -33,7 +37,7 @@ func (n *NotificationMerger) Merge(ctx context.Context, path string) (*notificat
 	rootPath := path
 	type loadRetVal struct {
 		idx          int
-		notification *notificationfile.NotificationFile
+		notification *File
 	}
 	var i int
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -43,7 +47,7 @@ func (n *NotificationMerger) Merge(ctx context.Context, path string) (*notificat
 		idx := i
 		loadPath := path
 		eg.Go(func() error {
-			notification, err := n.NotificationLoader.LoadNotificationForPath(egCtx, loadPath)
+			notification, err := n.NotificationLoader.LoadForPath(egCtx, loadPath)
 			if err != nil {
 				return fmt.Errorf("failed to load notification for path %s: %w", loadPath, err)
 			}

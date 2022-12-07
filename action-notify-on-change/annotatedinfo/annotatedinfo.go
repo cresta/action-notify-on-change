@@ -10,6 +10,10 @@ type AnnotatedInfo struct {
 	PrBase       string
 }
 
-type Populator interface {
+func (a *AnnotatedInfo) Populate(_ context.Context) (*AnnotatedInfo, error) {
+	return a, nil
+}
+
+type Fetch interface {
 	Populate(ctx context.Context) (*AnnotatedInfo, error)
 }

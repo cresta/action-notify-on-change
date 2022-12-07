@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/cresta/action-notify-on-change/action-notify-on-change/logger"
+
 	"github.com/cresta/action-notify-on-change/action-notify-on-change/config"
 	"github.com/google/go-github/v48/github"
 	"github.com/shurcooL/githubv4"
@@ -15,16 +17,17 @@ type GhClient struct {
 	restClient    *github.Client
 	graphqlClient *githubv4.Client
 	cfg           config.Config
+	logger        logger.Logger
 }
 
-func New(cfg config.Config) (*GhClient, error) {
+func New(cfg config.Config, logger logger.Logger) (*GhClient, error) {
 	// TODO: What is the right way to do this?
 	ctx := context.Background()
-	restClient, err := newGithubClient(ctx, cfg.GithubToken)
+	restClient, err := newGithubClient(ctx, cfg.GithubToken, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create github rest client: %w", err)
 	}
-	graphqlClient, err := newGithubGraphQLClient(ctx, cfg.GithubToken)
+	graphqlClient, err := newGithubGraphQLClient(ctx, cfg.GithubToken, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create github graphql client: %w", err)
 	}
@@ -32,23 +35,25 @@ func New(cfg config.Config) (*GhClient, error) {
 		restClient:    restClient,
 		graphqlClient: graphqlClient,
 		cfg:           cfg,
+		logger:        logger,
 	}, nil
 }
 
-func newGithubClient(ctx context.Context, token string) (*github.Client, error) {
+func newGithubClient(ctx context.Context, token string, l logger.Logger) (*github.Client, error) {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
 	tc := oauth2.NewClient(ctx, ts)
 	client := github.NewClient(tc)
-	_, _, err := client.Zen(ctx)
+	s, _, err := client.Zen(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query github zen: %w", err)
 	}
+	l.Infof("github zen: %s", s)
 	return client, nil
 }
 
-func newGithubGraphQLClient(ctx context.Context, token string) (*githubv4.Client, error) {
+func newGithubGraphQLClient(ctx context.Context, token string, l logger.Logger) (*githubv4.Client, error) {
 	src := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
@@ -65,18 +70,22 @@ func newGithubGraphQLClient(ctx context.Context, token string) (*githubv4.Client
 	if err != nil {
 		return nil, fmt.Errorf("failed to query github viewer: %w", err)
 	}
+	l.Infof("github viewer: %s", query.Viewer.Login)
 	return client, nil
 }
 
 func (g *GhClient) GetContents(ctx context.Context, filePath string) ([]byte, error) {
+	g.logger.Debugf("getting contents of %s", filePath)
 	fc, dc, res, err := g.restClient.Repositories.GetContents(ctx, g.cfg.RepoOwner, g.cfg.RepoName, filePath, &github.RepositoryContentGetOptions{Ref: g.cfg.CommitSha})
 	if err != nil {
 		if res != nil && res.StatusCode == http.StatusNotFound {
+			g.logger.Debugf("file %s not found", filePath)
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to get contents of %s: %w", filePath, err)
 	}
 	if res.StatusCode == http.StatusNotFound {
+		g.logger.Debugf("file %s not found", filePath)
 		return nil, nil
 	}
 	if dc != nil {
@@ -102,6 +111,7 @@ type PrInfo struct {
 }
 
 func (g *GhClient) PrInfo(ctx context.Context) (*PrInfo, error) {
+	g.logger.Debugf("getting pr info for %s", g.cfg.CommitSha)
 	ret := &PrInfo{}
 	var opts github.ListOptions
 	for {
@@ -144,6 +154,7 @@ type CommitInfo struct {
 }
 
 func (g *GhClient) GetCommit(ctx context.Context) (*CommitInfo, error) {
+	g.logger.Debugf("getting commit info for %s", g.cfg.CommitSha)
 	var opts github.ListOptions
 	ret := &CommitInfo{}
 	for {

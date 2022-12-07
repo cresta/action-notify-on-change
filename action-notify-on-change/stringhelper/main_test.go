@@ -1,4 +1,4 @@
-package main
+package stringhelper
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 func TestRemoveEmptyAndDedup(t *testing.T) {
 	run := func(input []string, expected []string) func(t *testing.T) {
 		return func(t *testing.T) {
-			actual := removeEmptyAndDeDup(input)
+			actual := RemoveEmptyAndDeDup(input)
 			assert.Equal(t, expected, actual)
 		}
 	}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/cresta/action-notify-on-change/action-notify-on-change/stringhelper"
 )
 
@@ -23,6 +25,17 @@ type ChangeToSend struct {
 
 type Sender interface {
 	SendMessage(ctx context.Context, change ChangeToSend) error
+}
+
+func SendMessagesInParallel(ctx context.Context, sender Sender, changes []ChangeToSend) error {
+	eg, egCtx := errgroup.WithContext(ctx)
+	for _, change := range changes {
+		change := change
+		eg.Go(func() error {
+			return sender.SendMessage(egCtx, change)
+		})
+	}
+	return eg.Wait()
 }
 
 func (s ChangeToSend) merge(from ChangeToSend) ChangeToSend {
