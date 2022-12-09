@@ -100,7 +100,7 @@ func (c *Creator) CreateChangesForFile(ctx context.Context, file string) (*Chang
 	}
 	change := ChangeToSend{
 		ModifiedFiles: []string{file},
-		Message:       notifMsg,
+		Messages:      []string{notifMsg},
 		CommitSha:     c.cfg.CommitSha,
 		Creator:       c.annotatedInfo.PrCreator,
 		Branch:        c.annotatedInfo.PrBase,
