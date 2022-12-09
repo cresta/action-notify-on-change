@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cresta/action-notify-on-change/action-notify-on-change/stringhelper"
+
 	"github.com/cresta/action-notify-on-change/action-notify-on-change/config"
 	"github.com/cresta/action-notify-on-change/action-notify-on-change/logger"
 	"github.com/slack-go/slack/slackutilsx"
@@ -130,11 +132,12 @@ func createSlackMessage(change ChangeToSend) slack.MsgOption {
 		monoTextBlock := slack.NewTextBlockObject("mrkdwn", fmt.Sprintf("\n```\n%s\n```\n", strings.Join(change.ModifiedFiles, "\n")), false, false)
 		blocks = append(blocks, slack.NewSectionBlock(header, []*slack.TextBlockObject{monoTextBlock}, nil))
 	}
-	if change.Message != "" {
+	msgToSend := strings.Join(stringhelper.RemoveEmptyAndDeDup(change.Messages), "\n")
+	if msgToSend != "" {
 		header := slack.NewTextBlockObject("mrkdwn", "*Custom Message:*", false, false)
 		blocks = append(blocks, slack.NewSectionBlock(
 			header, []*slack.TextBlockObject{
-				slack.NewTextBlockObject("mrkdwn", change.Message, false, false),
+				slack.NewTextBlockObject("mrkdwn", msgToSend, false, false),
 			}, nil))
 	}
 	return slack.MsgOptionBlocks(blocks...)

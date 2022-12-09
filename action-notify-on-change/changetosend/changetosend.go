@@ -21,7 +21,7 @@ type ChangeToSend struct {
 	Timestamp         time.Time // The time the pull request or commit was created
 	LinkToChange      string    // Link to the pull request or commit
 	LinkToAuthor      string    // Link to the user that created the pull request or commit
-	Message           string    // The message to send (Extra part of the Slack notification)
+	Messages          []string  // The message to send (Extra part of the Slack notification)
 }
 
 type Sender interface {
@@ -42,7 +42,7 @@ func SendMessagesInParallel(ctx context.Context, sender Sender, changes []Change
 func (s ChangeToSend) merge(from ChangeToSend) ChangeToSend {
 	s.ModifiedFiles = stringhelper.Deduplicate(append(s.ModifiedFiles, from.ModifiedFiles...))
 	s.Users = stringhelper.Deduplicate(append(s.Users, from.Users...))
-	s.Message = s.Message + "\n" + from.Message
+	s.Messages = append(s.Messages, from.Messages...)
 	return s
 }
 
