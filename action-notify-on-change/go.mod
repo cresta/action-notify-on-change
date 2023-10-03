@@ -11,7 +11,8 @@ require (
 	go.uber.org/fx v1.18.2
 	golang.org/x/oauth2 v0.2.0
 	golang.org/x/sync v0.1.0
-	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v2 v2.2.2
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -31,5 +32,4 @@ require (
 	golang.org/x/sys v0.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
