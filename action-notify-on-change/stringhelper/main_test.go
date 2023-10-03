@@ -19,7 +19,3 @@ func TestRemoveEmptyAndDedup(t *testing.T) {
 	t.Run("two with empty", run([]string{"a", ""}, []string{"a"}))
 	t.Run("two with empty and dup", run([]string{"a", "", "a", "b"}, []string{"a", "b"}))
 }
-
-func TestMergeNotificationsForPath(t *testing.T) {
-
-}
