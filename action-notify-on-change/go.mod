@@ -7,8 +7,8 @@ require (
 	github.com/sethvargo/go-githubactions v1.1.0
 	github.com/shurcooL/githubv4 v0.0.0-20221126192849-0b5c4c7994eb
 	github.com/slack-go/slack v0.11.4
-	github.com/stretchr/testify v1.7.1
-	go.uber.org/fx v1.18.2
+	github.com/stretchr/testify v1.8.0
+	go.uber.org/fx v1.20.0
 	golang.org/x/oauth2 v0.2.0
 	golang.org/x/sync v0.1.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -22,10 +22,10 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sethvargo/go-envconfig v0.8.0 // indirect
 	github.com/shurcooL/graphql v0.0.0-20220606043923-3cf50f8a0a29 // indirect
-	go.uber.org/atomic v1.6.0 // indirect
-	go.uber.org/dig v1.15.0 // indirect
-	go.uber.org/multierr v1.5.0 // indirect
-	go.uber.org/zap v1.16.0 // indirect
+	go.uber.org/atomic v1.7.0 // indirect
+	go.uber.org/dig v1.17.0 // indirect
+	go.uber.org/multierr v1.6.0 // indirect
+	go.uber.org/zap v1.23.0 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
 	golang.org/x/net v0.2.0 // indirect
 	golang.org/x/sys v0.2.0 // indirect
