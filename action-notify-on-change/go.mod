@@ -3,7 +3,7 @@ module github.com/cresta/action-notify-on-change/action-notify-on-change
 go 1.19
 
 require (
-	github.com/google/go-github/v48 v48.1.0
+	github.com/google/go-github/v48 v48.2.0
 	github.com/sethvargo/go-githubactions v1.1.0
 	github.com/shurcooL/githubv4 v0.0.0-20221126192849-0b5c4c7994eb
 	github.com/slack-go/slack v0.11.4
