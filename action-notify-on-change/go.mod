@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/google/go-github/v48 v48.2.0
+	github.com/google/go-github/v56 v56.0.0
 	github.com/sethvargo/go-githubactions v1.1.0
 	github.com/shurcooL/githubv4 v0.0.0-20230704064427-599ae7bbf278
 	github.com/slack-go/slack v0.12.3
