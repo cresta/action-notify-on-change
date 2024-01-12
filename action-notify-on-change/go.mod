@@ -1,10 +1,12 @@
 module github.com/cresta/action-notify-on-change/action-notify-on-change
 
-go 1.19
+go 1.21
+
+toolchain go1.21.6
 
 require (
 	github.com/google/go-github/v48 v48.2.0
-	github.com/sethvargo/go-githubactions v1.1.0
+	github.com/sethvargo/go-githubactions v1.2.0
 	github.com/shurcooL/githubv4 v0.0.0-20231126234147-1cffa1f02456
 	github.com/slack-go/slack v0.12.3
 	github.com/stretchr/testify v1.8.4
@@ -20,7 +22,6 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/sethvargo/go-envconfig v0.8.0 // indirect
 	github.com/shurcooL/graphql v0.0.0-20220606043923-3cf50f8a0a29 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/dig v1.17.0 // indirect
