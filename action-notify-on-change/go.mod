@@ -6,6 +6,7 @@ toolchain go1.21.6
 
 require (
 	github.com/google/go-github/v48 v48.2.0
+	github.com/google/go-github/v60 v60.0.0
 	github.com/sethvargo/go-githubactions v1.2.0
 	github.com/shurcooL/githubv4 v0.0.0-20231126234147-1cffa1f02456
 	github.com/slack-go/slack v0.12.5
