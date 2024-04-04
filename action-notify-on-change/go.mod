@@ -12,7 +12,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	go.uber.org/fx v1.21.0
 	golang.org/x/oauth2 v0.19.0
-	golang.org/x/sync v0.6.0
+	golang.org/x/sync v0.7.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
