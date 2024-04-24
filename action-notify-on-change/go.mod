@@ -10,7 +10,7 @@ require (
 	github.com/shurcooL/githubv4 v0.0.0-20240120211514-18a1ae0e79dc
 	github.com/slack-go/slack v0.12.5
 	github.com/stretchr/testify v1.9.0
-	go.uber.org/fx v1.21.0
+	go.uber.org/fx v1.21.1
 	golang.org/x/oauth2 v0.19.0
 	golang.org/x/sync v0.7.0
 	gopkg.in/yaml.v2 v2.4.0
