@@ -23,7 +23,7 @@ jobs:
           cache-dependency-path: 'action-notify-on-change/go.sum'
           cache: true
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v5
         with:
           version: latest
           working-directory: action-notify-on-change
