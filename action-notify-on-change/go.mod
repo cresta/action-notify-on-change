@@ -8,7 +8,7 @@ require (
 	github.com/google/go-github/v48 v48.2.0
 	github.com/sethvargo/go-githubactions v1.2.0
 	github.com/shurcooL/githubv4 v0.0.0-20240429030203-be2daab69064
-	github.com/slack-go/slack v0.12.5
+	github.com/slack-go/slack v0.13.0
 	github.com/stretchr/testify v1.9.0
 	go.uber.org/fx v1.21.1
 	golang.org/x/oauth2 v0.20.0
