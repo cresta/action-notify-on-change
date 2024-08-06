@@ -2,7 +2,7 @@ module github.com/cresta/action-notify-on-change/action-notify-on-change
 
 go 1.21
 
-toolchain go1.22.5
+toolchain go1.22.6
 
 require (
 	github.com/google/go-github/v48 v48.2.0
