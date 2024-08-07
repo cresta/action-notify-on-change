@@ -10,7 +10,7 @@ require (
 	github.com/shurcooL/githubv4 v0.0.0-20240429030203-be2daab69064
 	github.com/slack-go/slack v0.13.1
 	github.com/stretchr/testify v1.9.0
-	go.uber.org/fx v1.22.1
+	go.uber.org/fx v1.22.2
 	golang.org/x/oauth2 v0.22.0
 	golang.org/x/sync v0.8.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -22,7 +22,7 @@ require (
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/shurcooL/graphql v0.0.0-20220606043923-3cf50f8a0a29 // indirect
-	go.uber.org/dig v1.17.1 // indirect
+	go.uber.org/dig v1.18.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	go.uber.org/zap v1.26.0 // indirect
 	golang.org/x/crypto v0.21.0 // indirect
