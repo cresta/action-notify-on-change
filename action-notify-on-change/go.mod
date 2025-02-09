@@ -7,7 +7,7 @@ toolchain go1.23.6
 require (
 	github.com/google/go-github/v48 v48.2.0
 	github.com/sethvargo/go-githubactions v1.3.0
-	github.com/shurcooL/githubv4 v0.0.0-20240429030203-be2daab69064
+	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
 	github.com/slack-go/slack v0.16.0
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/fx v1.23.0
