@@ -1,6 +1,6 @@
 module github.com/cresta/action-notify-on-change/action-notify-on-change
 
-go 1.21
+go 1.23.0
 
 toolchain go1.24.0
 
@@ -11,7 +11,7 @@ require (
 	github.com/slack-go/slack v0.16.0
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/fx v1.23.0
-	golang.org/x/oauth2 v0.26.0
+	golang.org/x/oauth2 v0.29.0
 	golang.org/x/sync v0.11.0
 	gopkg.in/yaml.v2 v2.4.0
 )
