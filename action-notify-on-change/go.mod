@@ -9,7 +9,7 @@ require (
 	github.com/sethvargo/go-githubactions v1.3.1
 	github.com/shurcooL/githubv4 v0.0.0-20240429030203-be2daab69064
 	github.com/slack-go/slack v0.17.3
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	go.uber.org/fx v1.24.0
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/sync v0.16.0
