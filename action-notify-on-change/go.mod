@@ -13,7 +13,6 @@ require (
 	go.uber.org/fx v1.24.0
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/sync v0.19.0
-	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

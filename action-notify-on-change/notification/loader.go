@@ -7,7 +7,7 @@ import (
 
 	"github.com/cresta/action-notify-on-change/action-notify-on-change/ghclient"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 const notificationFile = ".action-notify-on-change.yaml"
