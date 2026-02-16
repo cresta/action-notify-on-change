@@ -6,6 +6,7 @@ toolchain go1.24.6
 
 require (
 	github.com/google/go-github/v48 v48.2.0
+	github.com/google/go-github/v83 v83.0.0
 	github.com/sethvargo/go-githubactions v1.3.2
 	github.com/shurcooL/githubv4 v0.0.0-20240429030203-be2daab69064
 	github.com/slack-go/slack v0.17.3
@@ -18,7 +19,7 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/shurcooL/graphql v0.0.0-20220606043923-3cf50f8a0a29 // indirect
