@@ -8,7 +8,7 @@ import (
 	"github.com/cresta/action-notify-on-change/action-notify-on-change/logger"
 
 	"github.com/cresta/action-notify-on-change/action-notify-on-change/config"
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v83/github"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/oauth2"
 )
