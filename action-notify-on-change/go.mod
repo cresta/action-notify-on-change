@@ -1,8 +1,6 @@
 module github.com/cresta/action-notify-on-change/action-notify-on-change
 
-go 1.24.0
-
-toolchain go1.24.6
+go 1.26.0
 
 require (
 	github.com/google/go-github/v48 v48.2.0
@@ -12,7 +10,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/fx v1.24.0
 	golang.org/x/oauth2 v0.30.0
-	golang.org/x/sync v0.19.0
+	golang.org/x/sync v0.23.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
